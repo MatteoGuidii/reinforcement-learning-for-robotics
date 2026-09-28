@@ -24,3 +24,5 @@ videos/
 
 # Others
 .Trash-*/
+# Python virtual environment (native setup)
+.venv/

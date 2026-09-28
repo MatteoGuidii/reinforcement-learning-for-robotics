@@ -1,0 +1,24 @@
+[project]
+name = "rl-for-robotics"
+version = "0.1.0"
+description = "Reinforcement learning for a self-balancing robot (MuJoCo + PPO)"
+readme = "README.md"
+requires-python = "==3.12.*"
+# Versions match Dockerfile.cpu
+dependencies = [
+    "torch==2.11.0",
+    "mujoco==3.7.0",
+    "gymnasium[mujoco]==1.2.3",
+    "tensorboard==2.20.0",
+    "tensorboardx==2.6.5",
+    "mediapy==1.2.6",
+    "matplotlib==3.10.8",
+    "onnx==1.21.0",
+    "onnxruntime==1.25.1",
+    "onnxscript==0.7.0",
+    "jupyterlab==4.5.6",
+    "ipykernel",
+]
+
+[tool.uv]
+package = false

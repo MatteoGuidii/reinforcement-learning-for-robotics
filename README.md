@@ -8,7 +8,29 @@ This repository holds the development environment and demos used in the Reinforc
   <img src=".images/rl-for-robotics-thumbnail-play.png" alt="Reinforcement Learning for Robotics" height="500">
 </a>
 
-## Installation
+## Installation (native, uv)
+
+Requires [uv](https://docs.astral.sh/uv/). Tested on macOS (Apple Silicon); training runs on the CPU.
+
+```sh
+make            # uv sync + register the viewer kernel + open JupyterLab
+```
+
+Other commands:
+
+```sh
+make setup        # install only (uv sync + kernel)
+make tensorboard  # TensorBoard on http://localhost:6006
+make clean        # remove .venv and the viewer kernel
+```
+
+In JupyterLab or VS Code, pick a kernel per notebook:
+ * **Python (RL + MuJoCo viewer)**: required for any cell that opens the MuJoCo viewer (`render_mode="human"` or `mujoco.viewer.launch_passive`). On macOS the viewer only works under `mjpython`, and this kernel runs through it.
+ * **.venv (Python 3.12)**: fine for headless cells (training with rendering off, ONNX export, plots).
+
+Notebooks use paths relative to their own folder, so open them from their directory (the default in JupyterLab and VS Code).
+
+## Installation (Docker)
 
 Download and install [Docker Desktop](https://www.docker.com/products/docker-desktop/). Make sure it is running before continuing to the next step.
 
