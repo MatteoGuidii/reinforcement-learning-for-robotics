@@ -6,12 +6,13 @@
 
 // Settings
 #define DEBUG 0                         // Enable debug printing on intervals (can affect motion!)
-const float PITCH_OFFSET = -0.01f;        // Tune this so the robot stays upright (+: back bias, -: front bias)
-const float MOTOR_BOOST = 1.5f;         // Tune this so the motors are responsive on battery power
-const float ACTION_DEADBAND = 0.02f;    // Tune this: Ignore small motor corrections
-const float ACTION_ALPHA = 0.90f;       // Tune this: alpha for low-pass filter (higher: smoother, more lag)
+const float PITCH_OFFSET = 0.00f;        // Tune this so the robot stays upright (+: back bias, -: front bias)
+const float MOTOR_BOOST = 1.0f;         // Tune this so the motors are responsive on battery power
+const float ACTION_DEADBAND = 0.04f;    // Tune this: Ignore small motor corrections
+const float ACTION_ALPHA = 0.5f;        // Tune this: alpha for low-pass filter (higher: smoother, more lag)
 const float COMP_ALPHA = 0.99f;         // Alpha for complementary filter (must match training)
 const float TIMESTEP = 0.005f;          // Time (sec) between intervals
+const int VEL_WINDOW = 4;               // Tune this: steps to measure wheel speed over (4 = 20 ms), reduces low-speed jitter
 const float MOTOR_SCALE = 1023.0f;      // Scale motors from [-1, 1] to [-1023, 1023]
 const float ENC_TICKS_PER_REV = 420.0f; // Encoder ticks per wheel revolution
 const float TIP_THRESHOLD = 0.79f;      // radians (~45 deg), stop motors if exceeded
@@ -27,8 +28,9 @@ const float ENC_TICKS_TO_RADS = (2.0f * M_PI) / ENC_TICKS_PER_REV;
 // Globals
 Bala bala;
 float pitch = 0.0f;
-int32_t prev_enc_left = 0;
-int32_t prev_enc_right = 0;
+int32_t enc_hist_left[VEL_WINDOW] = {0};  // Encoder readings from the last VEL_WINDOW steps
+int32_t enc_hist_right[VEL_WINDOW] = {0};
+int enc_hist_idx = 0;
 bool tipped = false;
 float action_filtered[2] = {0.0f, 0.0f};
 
@@ -90,13 +92,15 @@ void loop() {
   enc_left = ENC_DIR_LEFT * enc_left;
   enc_right = ENC_DIR_RIGHT * enc_right;
 
-  // Compute wheel velocities
-  int32_t delta_enc_left  = enc_left  - prev_enc_left;
-  int32_t delta_enc_right = enc_right - prev_enc_right;
-  prev_enc_left  = enc_left;
-  prev_enc_right = enc_right;
-  float wheel_vel_left  = (float)delta_enc_left  * ENC_TICKS_TO_RADS / TIMESTEP;
-  float wheel_vel_right = (float)delta_enc_right * ENC_TICKS_TO_RADS / TIMESTEP;
+  // Compute wheel velocities over the last VEL_WINDOW steps. One encoder tick in a single 5 ms
+  // step is ~3 rad/s, so measuring over a longer window smooths out that quantization.
+  int32_t delta_enc_left  = enc_left  - enc_hist_left[enc_hist_idx];
+  int32_t delta_enc_right = enc_right - enc_hist_right[enc_hist_idx];
+  enc_hist_left[enc_hist_idx]  = enc_left;
+  enc_hist_right[enc_hist_idx] = enc_right;
+  enc_hist_idx = (enc_hist_idx + 1) % VEL_WINDOW;
+  float wheel_vel_left  = (float)delta_enc_left  * ENC_TICKS_TO_RADS / (VEL_WINDOW * TIMESTEP);
+  float wheel_vel_right = (float)delta_enc_right * ENC_TICKS_TO_RADS / (VEL_WINDOW * TIMESTEP);
 
   // Check if tipped
   if (fabsf(pitch) > TIP_THRESHOLD) {
@@ -156,8 +160,10 @@ void loop() {
 
       // Reset the encoder counters
       bala.ClearEncoder();
-      prev_enc_left = 0;
-      prev_enc_right = 0;
+      for (int i = 0; i < VEL_WINDOW; i++) {
+        enc_hist_left[i] = 0;
+        enc_hist_right[i] = 0;
+      }
 
       // Wait a moment before starting
       Serial.printf("Untipped! Starting in %lu seconds\n", RESET_TIME_MS / 1000);

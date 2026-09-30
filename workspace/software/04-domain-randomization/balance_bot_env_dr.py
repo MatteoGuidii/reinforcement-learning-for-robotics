@@ -42,6 +42,7 @@ class DomainRandomConfig:
         push_prob: Probability per step of applying a random external force. Simulates bumps, 
                    nudges, and uneven terrain effects.
         push_force_max_n: Maximum magnitude of random push force in Newtons.
+        push_duration_steps: Number of consecutive steps each push lasts (1 = single-step impulse).
         mass_scale_range: (min, max) scaling factor for chassis mass each episode. Simulates payload
                           variation and model uncertainty.
         friction_scale_range: (min, max) scaling factor for wheel-to-ground friction each episode.
@@ -59,6 +60,7 @@ class DomainRandomConfig:
     motor_noise_scale: float = 0.0
     push_prob: float = 0.00
     push_force_max_n: float = 0.0
+    push_duration_steps: int = 1
     mass_scale_range: tuple = (1.0, 1.0)
     friction_scale_range: tuple = (1.0, 1.0)
     motor_gain_range: tuple = (1.0, 1.0)
@@ -220,6 +222,10 @@ class BalanceBotEnv(gym.Env):
         self._action_delay = 0
         self._action_buffer = []
 
+        # Active push: force (X, Y) and how many steps it has left
+        self._push_force = (0.0, 0.0)
+        self._push_steps_left = 0
+
         # Set initial pitch state
         self._pitch = 0.0
 
@@ -309,6 +315,7 @@ class BalanceBotEnv(gym.Env):
         self.data.xfrc_applied[self._chassis_id, :] = 0.0
         self.data.qfrc_applied[self._left_wheel_dof_idx]  = 0.0
         self.data.qfrc_applied[self._right_wheel_dof_idx] = 0.0
+        self._push_steps_left = 0
 
         # Reset the simulator
         mujoco.mj_resetData(self.model, self.data)
@@ -380,9 +387,10 @@ class BalanceBotEnv(gym.Env):
         self.data.qfrc_applied[self._left_wheel_dof_idx]  = 0.0
         self.data.qfrc_applied[self._right_wheel_dof_idx] = 0.0
 
-        # Apply random external force (push) to chassis in X and Y directions
+        # Apply random external force (push) to chassis in X and Y directions. Each push lasts
+        # push_duration_steps steps.
         if self.dr is not None and self.dr.push_prob > 0.0:
-            if self.np_random.random() < self.dr.push_prob:
+            if self._push_steps_left == 0 and self.np_random.random() < self.dr.push_prob:
                 # Get random force in X and Y directions
                 push_x = self.np_random.uniform(
                     -self.dr.push_force_max_n,
@@ -392,10 +400,14 @@ class BalanceBotEnv(gym.Env):
                     -self.dr.push_force_max_n,
                     self.dr.push_force_max_n
                 )
+                self._push_force = (push_x, push_y)
+                self._push_steps_left = self.dr.push_duration_steps
 
-                # Apply push to chassis
-                self.data.xfrc_applied[self._chassis_id, 0] = push_x
-                self.data.xfrc_applied[self._chassis_id, 1] = push_y
+            # Apply push to chassis
+            if self._push_steps_left > 0:
+                self.data.xfrc_applied[self._chassis_id, 0] = self._push_force[0]
+                self.data.xfrc_applied[self._chassis_id, 1] = self._push_force[1]
+                self._push_steps_left -= 1
 
         # Apply random torque to the axles to simulate the tire ridges hitting the ground
         if self.dr is not None and self.dr.ridge_prob > 0.0:
